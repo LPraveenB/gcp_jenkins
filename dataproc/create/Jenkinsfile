@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+
+    stages {
+        
+        stage('Authenticating..'){
+            steps{
+
+                    withCredentials([file(credentialsId: 'Jenkins-admin-sa', variable: 'GOOGLE_APPLICATION_CREDENTIAL')]) {
+                
+                     bat """
+			    @echo OFF
+			    gcloud config set project dollar-tree-project-369709
+                            gcloud auth activate-service-account --key-file %GOOGLE_APPLICATION_CREDENTIAL%
+                         """
+                    }                    
+                     
+                   } 
+		}
+
+	stage('Deploying Cluster...'){
+	    steps{
+		wrap([$class: 'BuildUser']) {
+                             
+                        bat """
+                        setlocal ENABLEDELAYEDEXPANSION
+                        @echo OFF
+                        
+                        if %spark-version% == 2.4 (
+                        gcloud dataproc clusters create dollar-tree-%BUILD_USER_ID% --enable-component-gateway --region us-west1  --subnet dataproc-network-us-west1 --zone us-west1-b --master-machine-type %master-machine-type% --master-boot-disk-type pd-balanced --master-boot-disk-size 150 --num-workers %num-worker-nodes% --worker-machine-type %worker-machine-type% --worker-boot-disk-type pd-balanced --worker-boot-disk-size 150 --image-version 1.5-ubuntu18 --optional-components ANACONDA,JUPYTER --max-idle 7200s --max-age 28800s --project dollar-tree-project-369709 --service-account=prod-vm-dataproc@dollar-tree-project-369709.iam.gserviceaccount.com --scopes default
+                        )
+                        
+                        if %spark-version% == 3.1 (
+                        gcloud dataproc clusters create dollar-tree-%BUILD_USER_ID% --enable-component-gateway --region us-west1  --subnet dataproc-network-us-west1 --zone us-west1-b --master-machine-type %master-machine-type% --master-boot-disk-type pd-balanced --master-boot-disk-size 150 --num-workers %num-worker-nodes% --worker-machine-type %worker-machine-type% --worker-boot-disk-type pd-balanced --worker-boot-disk-size 150 --image-version 2.0-debian10 --optional-components JUPYTER --max-idle 7200s --max-age 28800s --project dollar-tree-project-369709 --service-account=prod-vm-dataproc@dollar-tree-project-369709.iam.gserviceaccount.com --scopes default
+                        )
+                        """
+                     }
+                    
+		}  
+                post{
+                  
+                   success{
+                    script {
+               
+                    emailext subject: 'Build Successful',
+                        body: '<h3><b>Dataproc cluster Created</b></h3>', 
+                        recipientProviders: [
+                            [$class: 'CulpritsRecipientProvider'],
+                            [$class: 'DevelopersRecipientProvider'],
+                            [$class: 'RequesterRecipientProvider']
+                        ], 
+                        replyTo: '$DEFAULT_REPLYTO',
+                        to: '$DEFAULT_RECIPIENTS'
+                }
+                   }
+                failure{
+                    script {
+               
+                    emailext subject: 'Build Failed',
+                        body: '<h3><b>cluster not created. It is possible that cluster might already exists. Please check the jenkins console log.</b></h3>',
+                        recipientProviders: [
+                            [$class: 'CulpritsRecipientProvider'],
+                            [$class: 'DevelopersRecipientProvider'],
+                            [$class: 'RequesterRecipientProvider']
+                        ], 
+                        replyTo: '$DEFAULT_REPLYTO',
+                        to: '$DEFAULT_RECIPIENTS'
+                }
+
+
+                }
+                
+        }
+        
+        }
+    }
+}

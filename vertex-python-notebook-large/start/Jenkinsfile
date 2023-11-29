@@ -1,0 +1,70 @@
+pipeline {
+    agent any
+
+    stages {
+        
+        stage('Authenticating..'){
+            steps{
+
+                    withCredentials([file(credentialsId: 'Jenkins-admin-sa', variable: 'GOOGLE_APPLICATION_CREDENTIAL')]) {
+                
+                     bat """
+			    @echo OFF
+			    gcloud config set project dollar-tree-project-369709
+                            gcloud auth activate-service-account --key-file %GOOGLE_APPLICATION_CREDENTIAL%
+                         """
+                    }                    
+                     
+                   } 
+		}
+
+	stage('Starting notebook ...'){
+	    steps{
+		wrap([$class: 'BuildUser']) {
+                             
+                        bat """
+                        setlocal ENABLEDELAYEDEXPANSION
+                        
+                        gcloud notebooks instances start vertex-python-notebook-%BUILD_USER_ID%-large --location=us-west1-b
+                        """
+                     }
+                    
+		}  
+                post{
+                  
+                   success{
+                    script {
+               
+                    emailext subject: 'Build Successful',
+                        body: '<h3><b>Dataproc cluster Created</b></h3>', 
+                        recipientProviders: [
+                            [$class: 'CulpritsRecipientProvider'],
+                            [$class: 'DevelopersRecipientProvider'],
+                            [$class: 'RequesterRecipientProvider']
+                        ], 
+                        replyTo: '$DEFAULT_REPLYTO',
+                        to: '$DEFAULT_RECIPIENTS'
+                }
+                   }
+                failure{
+                    script {
+               
+                    emailext subject: 'Build Failed',
+                        body: '<h3><b>cluster not created. It is possible that cluster might already exists. Please check the jenkins console log.</b></h3>',
+                        recipientProviders: [
+                            [$class: 'CulpritsRecipientProvider'],
+                            [$class: 'DevelopersRecipientProvider'],
+                            [$class: 'RequesterRecipientProvider']
+                        ], 
+                        replyTo: '$DEFAULT_REPLYTO',
+                        to: '$DEFAULT_RECIPIENTS'
+                }
+
+
+                }
+                
+        }
+        
+        }
+    }
+}

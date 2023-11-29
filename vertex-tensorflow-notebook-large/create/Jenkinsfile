@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+
+    stages {
+        
+        stage('Authenticating..'){
+            steps{
+
+                    withCredentials([file(credentialsId: 'vertex-notebook-sa', variable: 'GCP_VERTEX_CREDENTIALS')]) {
+                
+                     bat """
+			    @echo OFF
+			    gcloud config set project dollar-tree-project-369709
+                            gcloud auth activate-service-account --key-file %GCP_VERTEX_CREDENTIALS%
+                         """
+                    }                    
+                     
+                   } 
+		}
+
+	stage('Creating notebook...'){
+	    steps{
+		wrap([$class: 'BuildUser']) {
+                             
+                        bat """
+                        setlocal ENABLEDELAYEDEXPANSION
+                        
+                        
+                        gcloud notebooks instances create vertex-tensorflow-notebook-%BUILD_USER_ID%-large --location=us-west1-b --vm-image-project=deeplearning-platform-release --vm-image-family=tf-ent-2-8-cu113-notebooks-debian-10 --instance-owners=%BUILD_USER_EMAIL% --machine-type=n1-standard-32 --service-account=prod-vm-vertex@dollar-tree-project-369709.iam.gserviceaccount.com --accelerator-core-count=2 --accelerator-type=NVIDIA_TESLA_T4 --boot-disk-size=250 --boot-disk-type=PD_BALANCED --subnet=dataproc-network-us-west1 --subnet-region=us-west1 
+                        """
+                     }
+                    
+		}  
+                post{
+                  
+                   success{
+                    script {
+               
+                    emailext subject: 'Build Successful',
+                        body: '<h3><b>Dataproc cluster Created</b></h3>', 
+                        recipientProviders: [
+                            [$class: 'CulpritsRecipientProvider'],
+                            [$class: 'DevelopersRecipientProvider'],
+                            [$class: 'RequesterRecipientProvider']
+                        ], 
+                        replyTo: '$DEFAULT_REPLYTO',
+                        to: '$DEFAULT_RECIPIENTS'
+                }
+                   }
+                failure{
+                    script {
+               
+                    emailext subject: 'Build Failed',
+                        body: '<h3><b>cluster not created. It is possible that cluster might already exists. Please check the jenkins console log.</b></h3>',
+                        recipientProviders: [
+                            [$class: 'CulpritsRecipientProvider'],
+                            [$class: 'DevelopersRecipientProvider'],
+                            [$class: 'RequesterRecipientProvider']
+                        ], 
+                        replyTo: '$DEFAULT_REPLYTO',
+                        to: '$DEFAULT_RECIPIENTS'
+                }
+
+
+                }
+                
+        }
+        
+        }
+    }
+}
